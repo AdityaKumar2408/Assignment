@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import { Line } from "react-chartjs-2";
 import "chart.js/auto";
@@ -14,6 +14,8 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const sidebarRef = useRef(null);
 
   useEffect(() => {
     setLoading(true);
@@ -32,10 +34,47 @@ export default function App() {
       });
   }, [page]);
 
+  // Handle clicks outside the sidebar to close it on mobile
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (window.innerWidth <= 600 && 
+          sidebarRef.current && 
+          !sidebarRef.current.contains(event.target) &&
+          !event.target.classList.contains('menu-toggle')) {
+        setSidebarVisible(false);
+      }
+    }
+    
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Handle window resize to manage sidebar visibility
+  useEffect(() => {
+    function handleResize() {
+      if (window.innerWidth > 600) {
+        setSidebarVisible(true);
+      } else {
+        setSidebarVisible(false);
+      }
+    }
+    
+    window.addEventListener('resize', handleResize);
+    handleResize(); // Initialize on load
+    
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const fetchIndexData = useCallback((name) => {
     if (cache[name]) {
       setSelectedIndex(cache[name]);
       setChartData(createChartData(cache[name]));
+      // Close sidebar on mobile after selection
+      if (window.innerWidth <= 600) {
+        setSidebarVisible(false);
+      }
       return;
     }
 
@@ -49,6 +88,10 @@ export default function App() {
         setSelectedIndex(res.data);
         setChartData(createChartData(res.data));
         setLoading(false);
+        // Close sidebar on mobile after selection
+        if (window.innerWidth <= 600) {
+          setSidebarVisible(false);
+        }
       })
       .catch((err) => {
         console.error("Failed to fetch index data:", err.message);
@@ -66,6 +109,7 @@ export default function App() {
         gradient.addColorStop(0, 'rgba(75, 192, 192, 0.8)');
         gradient.addColorStop(1, 'rgba(75, 192, 192, 0.1)');
         
+        // Apply to chart
         chart.data.datasets[0].backgroundColor = gradient;
       }
     };
@@ -170,15 +214,26 @@ export default function App() {
 
   return (
     <div className="dashboard-container">
-      <div className="sidebar">
+      {/* Mobile menu toggle button */}
+      <button 
+        className="menu-toggle" 
+        onClick={() => setSidebarVisible(!sidebarVisible)}
+      >
+        {sidebarVisible ? '✕' : '☰'}
+      </button>
+      
+      <div 
+        ref={sidebarRef}
+        className={`sidebar ${sidebarVisible ? 'show-sidebar' : ''}`}
+      >
         <div className="sidebar-header">
           <h2>Market Indices</h2>
         </div>
         
         <div className="indices-container">
           <List
-            height={600}
-            width={250}
+            height={window.innerWidth <= 768 ? 300 : 600}
+            width={window.innerWidth <= 600 ? 250 : 280}
             itemSize={50}
             itemCount={indices.length}
             className="indices-list"
@@ -198,7 +253,11 @@ export default function App() {
         <div className="sidebar-footer">
           {loading && <div className="loading-indicator"><div className="spinner"></div> Loading...</div>}
           {error && <div className="error-message">{error}</div>}
-          <button className="load-more-btn" onClick={() => setPage((prev) => prev + 1)}>
+          <button 
+            className="load-more-btn" 
+            onClick={() => setPage((prev) => prev + 1)}
+            disabled={loading}
+          >
             Load More
           </button>
         </div>
